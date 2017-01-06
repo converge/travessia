@@ -4,19 +4,25 @@ import sys
 import asyncio
 import ssl
 import signal
-
-# PyQt5
-from PyQt5 import QtWidgets, uic
-
 from random import choice
 from logging import basicConfig
 
-# IRC
+# ?
+from logging import getLogger
+_logger = getLogger(__name__)  # pylint: disable=invalid-name
+
+# PyQt5
+from PyQt5 import QtWidgets, uic
+from PyQt5.QtCore import pyqtSignal, QObject
+from quamash import QEventLoop
+
 import asyncio
 import ssl
 import signal
 
+# PyIRC
 from PyIRC.signal import event
+from PyIRC.line import Line
 from PyIRC.io.asyncio import IRCProtocol
 from PyIRC.extensions import bot_recommended
 
@@ -27,15 +33,20 @@ class MainWindow(QtWidgets.QMainWindow, formClass):
     def __init__(self):
         super(MainWindow, self).__init__()
         self.setupUi(self)
-        self.actionConnect.triggered.connect(self.connect_irc)
-        self.actionDisconnect.triggered.connect(self.disconnect_irc)
-        self.actionExit_2.triggered.connect(self.close)
-        self.mainStatus.setPlainText('teste')
+        self.actionConnect.triggered.connect(self.connect)
+        self.actionDisconnect.triggered.connect(self.disconnect)
+        self.actionExit.triggered.connect(self.close)
+        self.mainInput.returnPressed.connect(self.send)
 
-    def disconnect_irc(self):
-        print('disconnect')
+        self._server = None
+        self._task = None
+        self._server_running = None
 
-    async def connect_irc(self):
+    def send(self):
+        message = self.mainInput.displayText
+        self._server.send("WHOIS", ["converge"])
+
+    def connect(self):
 
         basicConfig(level="DEBUG")
 
@@ -65,27 +76,33 @@ class MainWindow(QtWidgets.QMainWindow, formClass):
             quit()
 
         # IRC connect
-        inst = TestProtocol(**args)
-        coro = await inst.connect()
+        self._server = TestProtocol(self, **args)
+        self._task = asyncio.ensure_future(self._server.connect())
+        self._server_running = True
 
-class EchoClientProtocol(asyncio.Protocol):
-    def __init__(self, message, loop):
-        self.message = message
-        self.loop = loop
+    def disconnect(self):
+        print('quit')
+        if self._server_running:
+            try:
+                self._server.send("QUIT", ["Bye!"])
+                self._server.close()
+                self._task.cancel()
+            except Exception as e:
+                print(e)
+            finally:
+                self._server_running = False
+                self._server = None
+                self._Task = None
 
-    def connection_made(self, transport):
-        transport.write(self.message.encode())
-        print('Data sent: {!r}'.format(self.message))
-
-    def data_received(self, data):
-        print('Data received: {!r}'.format(data.decode()))
-
-    def connection_lost(self, exc):
-        print('The server closed the connection')
-        print('Stop the event loop')
-        self.loop.stop()
+    def close(self):
+        self.disconnect()
+        return super().close()
 
 class TestProtocol(IRCProtocol):
+
+    def __init__(self, mainWindow, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.window = mainWindow
 
     yifflines = (
         "right there~",
@@ -96,6 +113,34 @@ class TestProtocol(IRCProtocol):
         "not in here! message me",
         "I don't do it in channels, sorry...",
     )
+
+    def data_received(self, data):
+        data = self.data + data
+
+        lines = data.split(b'\r\n')
+        self.data = lines.pop()
+
+        for line in lines:
+            line = Line.parse(line.decode('utf-8', 'ignore'))
+
+            # update QEditText
+            self.window.mainStatus.append(str(line))
+
+            _logger.debug("IN: %s", str(line).rstrip())
+            try:
+                super().recv(line)
+            except Exception:
+                # We should never get here!
+                _logger.exception("Exception received in recv loop")
+                self.send("QUIT", ["Exception received!"])
+                self.transport.close()
+
+                # This is fatal and needs to be reported so stop the event
+                # loop.
+                loop = asyncio.get_event_loop()
+                loop.stop()
+
+                raise
 
     @event("commands", "PRIVMSG")
     def respond(self, event, line):
@@ -117,22 +162,17 @@ class TestProtocol(IRCProtocol):
 
         self.send("PRIVMSG", params)
 
-    # overrided
-    def connect(self):
-        print('hi')
-        # (PyIRC connect)
-        #return loop.create_connection(lambda: self, self.server, self.port, ssl=self.ssl)
-        # testing at local server
-        return loop.create_connection(lambda: EchoClientProtocol(message, loop), '127.0.0.1', 8888)
+app = QtWidgets.QApplication(sys.argv)
+loop = QEventLoop(app)
+asyncio.set_event_loop(loop)
 
-
-async def runPyQt():
-    app = QtWidgets.QApplication(sys.argv)
+if __name__ == '__main__':
+    # initialize window
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
 
-if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(runPyQt())
-    loop.run_forever()
+    try:
+        loop.run_forever()
+    finally:
+        loop.close()
