@@ -13,7 +13,10 @@ _logger = getLogger(__name__)  # pylint: disable=invalid-name
 
 # PyQt5
 from PyQt5 import QtWidgets, uic
-from PyQt5.QtCore import pyqtSignal, QObject
+from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtGui import QStandardItemModel, QStandardItem
+
+# quamash
 from quamash import QEventLoop
 
 import asyncio
@@ -32,19 +35,57 @@ class MainWindow(QtWidgets.QMainWindow, formClass):
 
     def __init__(self):
         super(MainWindow, self).__init__()
+        self.setGeometry(400, 250, 661, 51)
         self.setupUi(self)
+
+        # QT signals
         self.actionConnect.triggered.connect(self.connect)
         self.actionDisconnect.triggered.connect(self.disconnect)
         self.actionExit.triggered.connect(self.close)
+        self.actionAbout.triggered.connect(self.about)
         self.mainInput.returnPressed.connect(self.send)
+        self.activeChats.currentRowChanged.connect(self.display)
+
+        self.activeChats.insertItem(0, 'irc.freenode.net')
+        self.activeChats.insertItem(1, '#python')
 
         self._server = None
         self._task = None
         self._server_running = None
 
+    # QT slots
+    def createChat(self, chatName):
+        self.activeChats.insertItem(2, chatName)
+        self.mainStackedWidget.setCurrentIndex(2)
+
+    def about(self):
+        QMessageBox.about(self, 'About',
+        '<center>Travessia IRC Client (0.1)<br><br>João Vanzuita (converge)<p>'
+        '<a href="https://github.com/converge/travessia">'
+        'https://github.com/converge/travessia</a></p></center>')
+
+    def display(self, i):
+        self.mainStackedWidget.setCurrentIndex(i)
+
     def send(self):
-        message = self.mainInput.displayText
-        self._server.send("WHOIS", ["converge"])
+        message = self.mainInput.text()
+
+        # removes the slash before command
+        message = message.lstrip('/')
+
+        messageList = message.split()
+        command = None
+        params = []
+
+        if len(messageList) >= 1:
+            command = messageList[0]
+            messageList.pop(0)
+            params = messageList
+            self._server.send(command, params)
+
+    def close(self):
+        self.disconnect()
+        return super().close()
 
     def connect(self):
 
@@ -76,7 +117,7 @@ class MainWindow(QtWidgets.QMainWindow, formClass):
             quit()
 
         # IRC connect
-        self._server = TestProtocol(self, **args)
+        self._server = TravessiaProtocol(self, **args)
         self._task = asyncio.ensure_future(self._server.connect())
         self._server_running = True
 
@@ -94,11 +135,7 @@ class MainWindow(QtWidgets.QMainWindow, formClass):
                 self._server = None
                 self._Task = None
 
-    def close(self):
-        self.disconnect()
-        return super().close()
-
-class TestProtocol(IRCProtocol):
+class TravessiaProtocol(IRCProtocol):
 
     def __init__(self, mainWindow, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -115,16 +152,27 @@ class TestProtocol(IRCProtocol):
     )
 
     def data_received(self, data):
+
         data = self.data + data
 
         lines = data.split(b'\r\n')
+        # removes the byte assignment, ex. [b':whelm.freenode.net 482 jpbot...']
         self.data = lines.pop()
 
         for line in lines:
             line = Line.parse(line.decode('utf-8', 'ignore'))
+            print('command %s' % line.command)
+            print('params %s' % line.params)
+            print('linestr %s' % line.linestr)
+
+            # temp
+            if '#bot7' in line.params:
+                self.window.statusChannelInfo.append(str(line))
+                # check if it has not already been created before creating
+                self.window.createChat('#bot7')
 
             # update QEditText
-            self.window.mainStatus.append(str(line))
+            self.window.statusServerInfo.append(str(line))
 
             _logger.debug("IN: %s", str(line).rstrip())
             try:
@@ -172,6 +220,7 @@ if __name__ == '__main__':
     window.show()
     sys.exit(app.exec_())
 
+    # asyncio loop
     try:
         loop.run_forever()
     finally:
