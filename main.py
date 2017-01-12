@@ -1,17 +1,16 @@
 #!/usr/bin/env python3.5
 
-from TravessiaProtocol import TravessiaProtocol
-
 import sys
 import asyncio
-from logging import basicConfig
+
+# travessia
+from TravessiaProtocol import TravessiaProtocol
 
 # PyQt5
 from PyQt5 import uic
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QMainWindow, QMessageBox, QWidget, QTextEdit,
                              QApplication)
-
-# from PyQt5 import QtCore, QtGui, QtWidgets, uic
 
 # quamash
 from quamash import QEventLoop
@@ -37,25 +36,72 @@ class MainWindow(QMainWindow, formClass):
         self.mainInput.returnPressed.connect(self.send)
         self.activeChats.currentRowChanged.connect(self.display)
 
+        # @todo: create it dynamically
+        # BUG: if I have only one activeChat window, when I create a new
+        # window(channel), it wont show up self.dataReceived content
         self.activeChats.insertItem(0, 'irc.freenode.net')
         self.activeChats.insertItem(1, '#python')
 
         self._server = None
         self._task = None
-        self._server_running = None
+        self._serverRunning = None
+
+        # dict to retrieve Widgets and QTextEdits to be showed in main window
+        self.chatWidgets = {}
+        self.chatWindows = {}
+
+    def dataReceived(self, command, params):
+        ''' receive data from user/server and take actions '''
+        # channel name
+        firstParam = params[0]
+        msg = params[1]
+
+        if command == 'JOIN' and firstParam[0] == '#':
+            self.createChat(firstParam)
+
+        if command != 'PRIVMSG' and firstParam[0] != '#':
+            self.statusServerInfo.append(''.join(command) + ''.join(params))
+
+        # join channel
+        if command == 'PRIVMSG' and \
+           firstParam[0] == '#' and \
+           self.isChatCreated(firstParam) is False:
+
+                self.createChat(firstParam, msg)
+
+        # send msg to channel
+        elif command == 'PRIVMSG' and \
+            firstParam[0] == '#' and \
+                self.isChatCreated(firstParam) is True:
+
+            self.chatWindows[firstParam].append(msg)
+
+        else:
+            self.statusServerInfo.append(msg)
+
+    # methods
+    def createChat(self, chatName, msg=None):
+        ''' create a new chat screen '''
+        print(self.activeChats.count())
+        nextIndex = self.activeChats.count() + 1
+        print(nextIndex)
+        self.activeChats.insertItem(nextIndex, chatName)
+        self.chatWidgets[chatName] = QWidget()
+        self.chatWindows[chatName] = QTextEdit(self.chatWidgets[chatName])
+
+        if msg is not None:
+            self.chatWindows[chatName].append(msg)
+
+        self.mainStackedWidget.addWidget(self.chatWindows[chatName])
+
+    def isChatCreated(self, chatName):
+        ''' verify if chat has been created '''
+        chat = self.activeChats.findItems(chatName, Qt.MatchExactly)
+        if len(chat) == 0:
+            return False
+        return True
 
     # QT slots
-    def createChat(self, chatName):
-        nextIndex = self.activeChats.count() + 1
-        self.activeChats.insertItem(nextIndex, chatName)
-        self.teste = QWidget()
-        self.telaChat = QTextEdit(self.teste)
-        self.telaChat.append('teste ' + str(nextIndex))
-        self.mainStackedWidget.addWidget(self.telaChat)
-
-        # self.activeChats.insertItem(2, chatName)
-        self.mainStackedWidget.setCurrentIndex(2)
-
     def about(self):
         QMessageBox.about(self, 'About',
                                 '<center>Travessia IRC Client (0.1)<br><br>'
@@ -68,6 +114,12 @@ class MainWindow(QMainWindow, formClass):
         self.mainStackedWidget.setCurrentIndex(i)
 
     def send(self):
+
+        # if not connected, clean input and exit
+        if not self._serverRunning:
+            self.mainInput.clear()
+            return
+
         message = self.mainInput.text()
 
         # removes the slash before command
@@ -77,11 +129,21 @@ class MainWindow(QMainWindow, formClass):
         command = None
         params = []
 
-        if len(messageList) >= 1:
+        # it's still bad, I'm working here atm
+        if len(messageList) > 1:
             command = messageList[0]
             messageList.pop(0)
             params = messageList
             self._server.send(command, params)
+        else:
+            chatName = self.activeChats.currentItem().text()
+            params.insert(0, chatName)
+            params.append(self.mainInput.text())
+            print(params)
+            self._server.send('PRIVMSG', params)
+            self.chatWindows[chatName].append(str(params))
+
+        self.mainInput.clear()
 
     def close(self):
         self.disconnect()
@@ -89,11 +151,9 @@ class MainWindow(QMainWindow, formClass):
 
     def connect(self):
 
-        basicConfig(level="DEBUG")
-
         # @todo: place it in a file / preference window
         args = {
-            'serverport': ('irc.freenode.net', 6667),
+            'serverport': ('127.0.0.1', 6667),
             'ssl': False,
             'username': 'jpbot',
             'nick': 'jpbot',
@@ -119,11 +179,11 @@ class MainWindow(QMainWindow, formClass):
         # IRC connect
         self._server = TravessiaProtocol(self, **args)
         self._task = asyncio.ensure_future(self._server.connect())
-        self._server_running = True
+        self._serverRunning = True
 
     def disconnect(self):
         print('quit')
-        if self._server_running:
+        if self._serverRunning:
             try:
                 self._server.send("QUIT", ["Bye!"])
                 self._server.close()
@@ -131,7 +191,7 @@ class MainWindow(QMainWindow, formClass):
             except Exception as e:
                 print(e)
             finally:
-                self._server_running = False
+                self._serverRunning = False
                 self._server = None
                 self._Task = None
 

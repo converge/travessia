@@ -1,10 +1,10 @@
+import asyncio
+from random import choice
+
 # PyIRC
 from PyIRC.signal import event
 from PyIRC.io.asyncio import IRCProtocol
 from PyIRC.line import Line
-
-import asyncio
-from random import choice
 
 # ?
 from logging import getLogger
@@ -41,19 +41,8 @@ class TravessiaProtocol(IRCProtocol):
             print('params %s' % line.params)
             print('linestr %s' % line.linestr)
 
-            # temp
-            if '#bot7' in line.params:
-                self.window.statusChannelInfo.append(str(line))
-                # check if it has not already been created before creating
-                self.window.createChat('#bot7')
-
-            if '#bot9' in line.params:
-                self.window.statusChannelInfo.append(str(line))
-                # check if it has not already been created before creating
-                self.window.createChat('#bot9')
-
-            # update QEditText
-            self.window.statusServerInfo.append(str(line))
+            # send datas to window/qt control its behavior
+            self.window.dataReceived(line.command, line.params)
 
             _logger.debug("IN: %s", str(line).rstrip())
             try:
