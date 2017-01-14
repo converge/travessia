@@ -50,15 +50,21 @@ class MainWindow(QMainWindow, formClass):
         self.chatWidgets = {}
         self.chatWindows = {}
 
-    def dataReceived(self, command, params):
+    def dataReceived(self, command, params, linestr):
         ''' receive data from user/server and take actions '''
+
         # channel name
         firstParam = params[0]
-        msg = params[1]
 
-        if command == 'JOIN' and firstParam[0] == '#':
-            self.createChat(firstParam)
+        msg = ' '.join(params[1:])
 
+        if command == 'JOIN' and \
+                firstParam.startswith('#') and \
+                self.isChatCreated(firstParam) is False:
+
+                self.createChat(firstParam)
+
+        # status
         if command != 'PRIVMSG' and firstParam[0] != '#':
             self.statusServerInfo.append(''.join(command) + ''.join(params))
 
@@ -74,7 +80,13 @@ class MainWindow(QMainWindow, formClass):
             firstParam[0] == '#' and \
                 self.isChatCreated(firstParam) is True:
 
-            self.chatWindows[firstParam].append(msg)
+            # linestr :converge!converge@i.love.debian.org PRIVMSG #bot1 :oi
+            nickBegin = linestr.find(':') + 1
+            nickEnd = linestr.find('!')
+            nick = linestr[nickBegin:nickEnd]
+            # nick == converge
+
+            self.chatWindows[firstParam].append('<' + nick + '> ' + msg)
 
         else:
             self.statusServerInfo.append(msg)
@@ -122,25 +134,22 @@ class MainWindow(QMainWindow, formClass):
 
         message = self.mainInput.text()
 
-        # removes the slash before command
-        message = message.lstrip('/')
-
-        messageList = message.split()
         command = None
         params = []
 
         # it's still bad, I'm working here atm
-        if len(messageList) > 1:
+        if message.startswith('/'):
+            message = message.lstrip('/')
+            messageList = message.split()
             command = messageList[0]
-            messageList.pop(0)
-            params = messageList
+            params = messageList[1:]
             self._server.send(command, params)
         else:
+            command = 'PRIVMSG'
             chatName = self.activeChats.currentItem().text()
-            params.insert(0, chatName)
+            params.append(chatName)
             params.append(self.mainInput.text())
-            print(params)
-            self._server.send('PRIVMSG', params)
+            self._server.send(command, params)
             self.chatWindows[chatName].append(str(params))
 
         self.mainInput.clear()
@@ -153,7 +162,7 @@ class MainWindow(QMainWindow, formClass):
 
         # @todo: place it in a file / preference window
         args = {
-            'serverport': ('127.0.0.1', 6667),
+            'serverport': ('irc.freenode.net', 6667),
             'ssl': False,
             'username': 'jpbot',
             'nick': 'jpbot',

@@ -42,7 +42,7 @@ class TravessiaProtocol(IRCProtocol):
             print('linestr %s' % line.linestr)
 
             # send datas to window/qt control its behavior
-            self.window.dataReceived(line.command, line.params)
+            self.window.dataReceived(line.command, line.params, line.linestr)
 
             _logger.debug("IN: %s", str(line).rstrip())
             try:

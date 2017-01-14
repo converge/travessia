@@ -118,6 +118,9 @@
    <addaction name="menuAbout"/>
   </widget>
   <action name="actionConnect">
+   <property name="checkable">
+    <bool>false</bool>
+   </property>
    <property name="text">
     <string>Connect</string>
    </property>
