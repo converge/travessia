@@ -6,10 +6,6 @@ from PyIRC.signal import event
 from PyIRC.io.asyncio import IRCProtocol
 from PyIRC.line import Line
 
-# ?
-from logging import getLogger
-_logger = getLogger(__name__)  # pylint: disable=invalid-name
-
 
 class TravessiaProtocol(IRCProtocol):
 
@@ -28,7 +24,8 @@ class TravessiaProtocol(IRCProtocol):
     )
 
     def data_received(self, data):
-
+        print('&&&')
+        print(data)
         data = self.data + data
 
         lines = data.split(b'\r\n')
@@ -37,19 +34,16 @@ class TravessiaProtocol(IRCProtocol):
 
         for line in lines:
             line = Line.parse(line.decode('utf-8', 'ignore'))
-            print('command %s' % line.command)
-            print('params %s' % line.params)
-            print('linestr %s' % line.linestr)
 
             # send datas to window/qt control its behavior
-            self.window.dataReceived(line.command, line.params, line.linestr)
+            self.window.dataReceived(line.command,
+                                     line.params,
+                                     line.hostmask.nick)
 
-            _logger.debug("IN: %s", str(line).rstrip())
             try:
                 super().recv(line)
             except Exception:
                 # We should never get here!
-                _logger.exception("Exception received in recv loop")
                 self.send("QUIT", ["Exception received!"])
                 self.transport.close()
 
@@ -62,7 +56,6 @@ class TravessiaProtocol(IRCProtocol):
 
     @event("commands", "PRIVMSG")
     def respond(self, event, line):
-        print(dir(self.basic_rfc))
         params = line.params
 
         if len(params) < 2:
@@ -70,6 +63,7 @@ class TravessiaProtocol(IRCProtocol):
 
         if self.casecmp(self.basic_rfc.nick, params[0]):
             params = [line.hostmask.nick, choice(self.yifflines)]
+
         else:
             # Ensure it starts with us
             check_self = params[-1][:len(self.basic_rfc.nick)]
@@ -77,5 +71,7 @@ class TravessiaProtocol(IRCProtocol):
                 return
 
             params = [params[0], choice(self.flirtlines)]
+            print(params)
 
-        self.send("PRIVMSG", params)
+        self.send('PRIVMSG', params)
+        self.window.dataReceived('PRIVMSG', params, self.basic_rfc.nick)

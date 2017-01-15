@@ -2,6 +2,7 @@
 
 import sys
 import asyncio
+import yaml
 
 # travessia
 from TravessiaProtocol import TravessiaProtocol
@@ -39,54 +40,56 @@ class MainWindow(QMainWindow, formClass):
         # @todo: create it dynamically
         # BUG: if I have only one activeChat window, when I create a new
         # window(channel), it wont show up self.dataReceived content
-        self.activeChats.insertItem(0, 'irc.freenode.net')
-        self.activeChats.insertItem(1, '#python')
+        self.activeChats.insertItem(0, 'status')
+        self.activeChats.insertItem(1, 'bug')
 
         self._server = None
         self._task = None
         self._serverRunning = None
+        self.cfg = None
 
         # dict to retrieve Widgets and QTextEdits to be showed in main window
         self.chatWidgets = {}
         self.chatWindows = {}
 
-    def dataReceived(self, command, params, linestr):
+    def dataReceived(self, command, params, nick):
         ''' receive data from user/server and take actions '''
 
         # channel name
-        firstParam = params[0]
+        channelName = params[0]
 
         msg = ' '.join(params[1:])
 
+        # join channel
         if command == 'JOIN' and \
-                firstParam.startswith('#') and \
-                self.isChatCreated(firstParam) is False:
+                channelName.startswith('#') and \
+                self.isChatCreated(channelName) is False:
 
-                self.createChat(firstParam)
+            self.createChat(channelName)
 
-        # status
-        if command != 'PRIVMSG' and firstParam[0] != '#':
-            self.statusServerInfo.append(''.join(command) + ''.join(params))
+        # part channel
+        elif command == 'PART' and \
+                channelName.startswith('#') and \
+                self.isChatCreated(channelName) is True:
+
+            self.removeChat(channelName)
 
         # join channel
-        if command == 'PRIVMSG' and \
-           firstParam[0] == '#' and \
-           self.isChatCreated(firstParam) is False:
+        elif command == 'PRIVMSG' and \
+                channelName.startswith('#') and \
+                self.isChatCreated(channelName) is False:
 
-                self.createChat(firstParam, msg)
+            self.createChat(channelName, msg)
 
         # send msg to channel
         elif command == 'PRIVMSG' and \
-            firstParam[0] == '#' and \
-                self.isChatCreated(firstParam) is True:
+                channelName.startswith('#') and \
+                self.isChatCreated(channelName) is True:
 
-            # linestr :converge!converge@i.love.debian.org PRIVMSG #bot1 :oi
-            nickBegin = linestr.find(':') + 1
-            nickEnd = linestr.find('!')
-            nick = linestr[nickBegin:nickEnd]
-            # nick == converge
-
-            self.chatWindows[firstParam].append('<' + nick + '> ' + msg)
+            self.chatWindows[channelName].append('<'
+                                                 + nick
+                                                 + '> '
+                                                 + msg)
 
         else:
             self.statusServerInfo.append(msg)
@@ -94,9 +97,7 @@ class MainWindow(QMainWindow, formClass):
     # methods
     def createChat(self, chatName, msg=None):
         ''' create a new chat screen '''
-        print(self.activeChats.count())
         nextIndex = self.activeChats.count() + 1
-        print(nextIndex)
         self.activeChats.insertItem(nextIndex, chatName)
         self.chatWidgets[chatName] = QWidget()
         self.chatWindows[chatName] = QTextEdit(self.chatWidgets[chatName])
@@ -105,6 +106,11 @@ class MainWindow(QMainWindow, formClass):
             self.chatWindows[chatName].append(msg)
 
         self.mainStackedWidget.addWidget(self.chatWindows[chatName])
+
+    def removeChat(self, chatName):
+        item = self.activeChats.findItems(chatName, Qt.MatchExactly)
+        for i in item:
+            self.activeChats.takeItem(self.activeChats.row(i))
 
     def isChatCreated(self, chatName):
         ''' verify if chat has been created '''
@@ -124,6 +130,7 @@ class MainWindow(QMainWindow, formClass):
 
     def display(self, i):
         self.mainStackedWidget.setCurrentIndex(i)
+        self.mainInput.setFocus()
 
     def send(self):
 
@@ -137,7 +144,6 @@ class MainWindow(QMainWindow, formClass):
         command = None
         params = []
 
-        # it's still bad, I'm working here atm
         if message.startswith('/'):
             message = message.lstrip('/')
             messageList = message.split()
@@ -150,7 +156,10 @@ class MainWindow(QMainWindow, formClass):
             params.append(chatName)
             params.append(self.mainInput.text())
             self._server.send(command, params)
-            self.chatWindows[chatName].append(str(params))
+            self.chatWindows[chatName].append('<'
+                                              + self.cfg['userInfo']['nick']
+                                              + '> '
+                                              + str(params[1]))
 
         self.mainInput.clear()
 
@@ -160,15 +169,17 @@ class MainWindow(QMainWindow, formClass):
 
     def connect(self):
 
-        # @todo: place it in a file / preference window
-        args = {
-            'serverport': ('irc.freenode.net', 6667),
-            'ssl': False,
-            'username': 'jpbot',
-            'nick': 'jpbot',
-            'gecos': 'hello everybody',
-            'extensions': bot_recommended,
-            'join': ['#bot7'],
+        with open('config.yml', 'r') as ymlfile:
+            self.cfg = yaml.load(ymlfile)
+
+        config = {
+            'serverport': (self.cfg['serverInfo']['host'],
+                           self.cfg['serverInfo']['port']),
+            'ssl': self.cfg['serverInfo']['ssl'],
+            'username': self.cfg['userInfo']['username'],
+            'nick': self.cfg['userInfo']['nick'],
+            'gecos': self.cfg['userInfo']['gecos'],
+            'extensions': bot_recommended
         }
 
         def sigint(*protos):
@@ -180,18 +191,16 @@ class MainWindow(QMainWindow, formClass):
                     # Ugh! A race probably happened. Yay, signals.
                     pass
 
-            print()
-            print("Terminating due to ctrl-c!")
-
             quit()
 
         # IRC connect
-        self._server = TravessiaProtocol(self, **args)
+        self._server = TravessiaProtocol(self, **config)
         self._task = asyncio.ensure_future(self._server.connect())
         self._serverRunning = True
 
+        self.activeChats.item(0).setText(self.cfg['serverInfo']['host'])
+
     def disconnect(self):
-        print('quit')
         if self._serverRunning:
             try:
                 self._server.send("QUIT", ["Bye!"])
