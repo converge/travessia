@@ -2,33 +2,89 @@
 <ui version="4.0">
  <class>MainWindow</class>
  <widget class="QMainWindow" name="MainWindow">
+  <property name="enabled">
+   <bool>true</bool>
+  </property>
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>635</width>
-    <height>491</height>
+    <width>771</width>
+    <height>514</height>
    </rect>
   </property>
+  <property name="cursor">
+   <cursorShape>ArrowCursor</cursorShape>
+  </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>travessia</string>
+  </property>
+  <property name="windowOpacity">
+   <double>1.000000000000000</double>
+  </property>
+  <property name="autoFillBackground">
+   <bool>false</bool>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QTextEdit" name="mainStatus">
+   <widget class="QLineEdit" name="mainInput">
+    <property name="geometry">
+     <rect>
+      <x>110</x>
+      <y>440</y>
+      <width>661</width>
+      <height>51</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>DejaVu Sans</family>
+      <pointsize>12</pointsize>
+     </font>
+    </property>
+   </widget>
+   <widget class="QListWidget" name="activeChats">
     <property name="geometry">
      <rect>
       <x>0</x>
       <y>0</y>
-      <width>641</width>
-      <height>451</height>
+      <width>111</width>
+      <height>491</height>
      </rect>
     </property>
-    <property name="readOnly">
-     <bool>true</bool>
+   </widget>
+   <widget class="QStackedWidget" name="mainStackedWidget">
+    <property name="geometry">
+     <rect>
+      <x>110</x>
+      <y>0</y>
+      <width>661</width>
+      <height>441</height>
+     </rect>
     </property>
-    <property name="acceptRichText">
-     <bool>false</bool>
-    </property>
+    <widget class="QWidget" name="serverInfo">
+     <widget class="QTextEdit" name="statusServerInfo">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>661</width>
+        <height>441</height>
+       </rect>
+      </property>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="channelInfo">
+     <widget class="QTextEdit" name="statusChannelInfo">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>661</width>
+        <height>441</height>
+       </rect>
+      </property>
+     </widget>
+    </widget>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
@@ -36,8 +92,8 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>635</width>
-     <height>22</height>
+     <width>771</width>
+     <height>23</height>
     </rect>
    </property>
    <property name="nativeMenuBar">
@@ -50,7 +106,7 @@
     <addaction name="actionConnect"/>
     <addaction name="actionDisconnect"/>
     <addaction name="separator"/>
-    <addaction name="actionExit_2"/>
+    <addaction name="actionExit"/>
    </widget>
    <widget class="QMenu" name="menuAbout">
     <property name="title">
@@ -61,8 +117,10 @@
    <addaction name="menuTeste"/>
    <addaction name="menuAbout"/>
   </widget>
-  <widget class="QStatusBar" name="statusbar"/>
   <action name="actionConnect">
+   <property name="checkable">
+    <bool>false</bool>
+   </property>
    <property name="text">
     <string>Connect</string>
    </property>
@@ -79,11 +137,6 @@
    </property>
   </action>
   <action name="actionExit">
-   <property name="text">
-    <string>Exit</string>
-   </property>
-  </action>
-  <action name="actionExit_2">
    <property name="text">
     <string>Exit</string>
    </property>
