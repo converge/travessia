@@ -1,0 +1,9 @@
+serverInfo:
+    host: localhost
+    port: 6667
+    ssl: False
+
+userInfo:
+    username: travessia
+    nick: travessia
+    gecos: Travessia IRC Client
